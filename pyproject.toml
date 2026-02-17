@@ -1,0 +1,26 @@
+[project]
+name = "cwkrbd"
+version = "0.1.0"
+description = "Proof-of-concept for a Kerberos server"
+authors = [
+    { name = "Constantin Wiemer", email = "constantin.wiemer@allianz.de" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "loguru>=0.7.3",
+    "scapy>=2.7.0",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 130
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "UP", "SIM", "N"]  # enable all rules we want to apply
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+known-local-folder = ["routers"]
+
+[tool.ty.rules]
+conflicting-declarations = "warn"
