@@ -61,8 +61,7 @@ async def main() -> int:
     )
     try:
         await asyncio.Event().wait()
-    except KeyboardInterrupt:
-        # TODO: How to really catch Ctrl-C?
+    except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Shutting down server")
         return EXIT_OK
     except Exception as e:
