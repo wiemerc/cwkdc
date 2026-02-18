@@ -8,21 +8,24 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 # to supress warnings from scapy:
 import logging
 logging.getLogger("scapy.runtime").setLevel(logging.CRITICAL)
-from scapy.layers.kerberos import KRB_AS_REQ
+from scapy.layers.kerberos import KRB_AS_REQ, KRB_ERROR
 from loguru import logger
 
 
 EXIT_OK = 0
 EXIT_ERROR = 1
 
-KNOWN_USER_PRINCIPAL_NAMES = [
+KRB_REALM = b"CWTEST.LOCAL"
+KRB_KNOWN_USER_PRINCIPAL_NAMES = [
     "consti@CWTEST.LOCAL",
 ]
 
 
-# Good explanation of Kerberos:
-# - https://www.youtube.com/watch?v=qW361k3-BtU
+# Relevant links:
+# - https://www.youtube.com/watch?v=5N242XcKAsM
 # - https://academy.hackthebox.com/module/74/section/701
+# - https://datatracker.ietf.org/doc/html/rfc4120
+# - https://kerberos.org/software/tutorial.html
 class KerberosServer:
     def connection_made(self, transport):
         self.transport = transport
@@ -38,9 +41,18 @@ class KerberosServer:
         upn = req.reqBody.cname.nameString[0].val.decode() + "@" + req.reqBody.realm.val.decode()
         spn = req.reqBody.sname.nameString[0].val.decode() + "@" + req.reqBody.sname.nameString[1].val.decode()
         logger.debug(f"Message is AS-REQ: UPN={upn}, SPN={spn}, nonce={req.reqBody.nonce.val}")
-        if upn in KNOWN_USER_PRINCIPAL_NAMES:
-            logger.info(f"User {upn} is known")
-            pass
+        if upn in KRB_KNOWN_USER_PRINCIPAL_NAMES:
+            logger.info(f"User '{upn}' is known")
+            # TODO
+        else:
+            logger.error(f"User '{upn}' is not known")
+            resp = KRB_ERROR(
+                realm=KRB_REALM,
+                # TODO: Set the remaining attributes
+                errorCode="KDC_ERR_C_PRINCIPAL_UNKNOWN",
+                eText=f"User '{upn}' is not known"
+            )
+            self.transport.sendto(bytes(resp), addr)
 
 
 async def main() -> int:
