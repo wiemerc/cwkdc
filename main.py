@@ -3,13 +3,14 @@
 
 import asyncio
 import sys
-from datetime import datetime, timezone
 
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
-from loguru import logger
-from pyasn1.codec.der import decoder, encoder
+from datetime import datetime, timezone
+
 from impacket.krb5.asn1 import AS_REQ, KRB_ERROR, seq_set
 from impacket.krb5.constants import ApplicationTagNumbers, ErrorCodes, PrincipalNameType
+from loguru import logger
+from pyasn1.codec.der import decoder, encoder
 
 
 EXIT_OK = 0
@@ -20,6 +21,37 @@ KRB_SNAME = "krbtgt"
 KRB_KNOWN_USER_PRINCIPAL_NAMES = [
     "consti@CWTEST.LOCAL",
 ]
+
+
+class KrbError:
+    def __init__(self, code: ErrorCodes, text: str):
+        self.code = code
+        self.text = text
+
+    def to_bytes(self) -> bytes:
+        msg = KRB_ERROR()
+        msg["pvno"] = 5
+        msg["msg-type"] = ApplicationTagNumbers.KRB_ERROR.value
+        now = datetime.now(timezone.utc)
+        msg["stime"] = now.strftime("%Y%m%d%H%M%SZ")
+        msg["susec"] = now.microsecond
+        msg["realm"] = KRB_REALM
+        msg["error-code"] = self.code.value
+        msg["e-text"] = self.text
+
+        # TODO: Why doesn't the code below work?
+        # sname = PrincipalName()
+        # sname["name-type"] = PrincipalNameType.NT_SRV_INST.value
+        # sname["name-string"][0] = KRB_SNAME
+        # sname["name-string"][1] = KRB_REALM
+        # resp["sname"] = sname
+        sname_component = seq_set(msg, "sname")
+        sname_component["name-type"] = PrincipalNameType.NT_SRV_INST.value
+        seq_set(sname_component, "name-string")
+        sname_component["name-string"][0] = KRB_SNAME
+        sname_component["name-string"][1] = KRB_REALM
+        return encoder.encode(msg)
+
 
 
 # Relevant links:
@@ -53,29 +85,8 @@ class KerberosServer:
             # TODO
         else:
             logger.error(f"User '{upn}' is not known")
-            resp = KRB_ERROR()
-            resp["pvno"] = 5
-            resp["msg-type"] = ApplicationTagNumbers.KRB_ERROR.value
-            now = datetime.now(timezone.utc)
-            resp["stime"] = now.strftime("%Y%m%d%H%M%SZ")
-            resp["susec"] = now.microsecond
-            resp["realm"] = KRB_REALM
-            resp["error-code"] = ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN.value
-            resp["e-text"] = f"User '{upn}' is not known"
-
-            # TODO: Why doesn't the code below work?
-            # sname = PrincipalName()
-            # sname["name-type"] = PrincipalNameType.NT_SRV_INST.value
-            # sname["name-string"][0] = KRB_SNAME
-            # sname["name-string"][1] = KRB_REALM
-            # resp["sname"] = sname
-            sname_component = seq_set(resp, "sname")
-            sname_component["name-type"] = PrincipalNameType.NT_SRV_INST.value
-            seq_set(sname_component, "name-string")
-            sname_component["name-string"][0] = KRB_SNAME
-            sname_component["name-string"][1] = KRB_REALM
-
-            self.transport.sendto(encoder.encode(resp), addr)
+            resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"User '{upn}' is not known")
+            self.transport.sendto(resp.to_bytes(), addr)
 
 
 async def main() -> int:
