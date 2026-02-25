@@ -7,7 +7,7 @@ import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from datetime import datetime, timezone
 
-from impacket.krb5.asn1 import AS_REQ, KRB_ERROR, seq_set
+from impacket.krb5.asn1 import AS_REQ, KRB_ERROR, PrincipalName, seq_set
 from impacket.krb5.constants import ApplicationTagNumbers, ErrorCodes, PrincipalNameType
 from impacket.krb5.crypto import Key, _get_enctype_profile, get_random_bytes
 from impacket.krb5.types import Principal
@@ -20,9 +20,10 @@ EXIT_ERROR = 1
 
 KRB_REALM = "CWTEST.LOCAL"
 KRB_SNAME = "krbtgt"
-KRB_KNOWN_USER_PRINCIPAL_NAMES = [
-    "consti@CWTEST.LOCAL",
-]
+KRB_KNOWN_PRINCIPALS = {
+    "consti@CWTEST.LOCAL": "consti123",
+    "krbtgt@CWTEST.LOCAL": "krbtgt123",
+}
 
 
 class KrbError:
@@ -65,33 +66,70 @@ class KerberosServer:
         req_body = req["req-body"]
         cname = req_body["cname"]
         realm = str(req_body["realm"])
-        upn = str(cname["name-string"][0]) + "@" + realm
+        cpn = str(cname["name-string"][0]) + "@" + realm
         sname = req_body["sname"]
         spn = str(sname["name-string"][0]) + "@" + str(sname["name-string"][1])
-        logger.debug(f"Message is AS-REQ: UPN={upn}, SPN={spn}")
+        enctype_to_use = req_body["etype"][0]
+        logger.debug(f"Message is AS-REQ: UPN={cpn}, SPN={spn}")
 
-        if upn in KRB_KNOWN_USER_PRINCIPAL_NAMES:
-            logger.info(f"User '{upn}' is known")
-            enctype_to_use = req_body["etype"][0]
-            session_key = self._create_session_key(enctype_to_use)
-            logger.debug(
-                f"Created session key '{session_key}' for encryption type {enctype_to_use} (the first one offered by the client)"
+        if cpn in KRB_KNOWN_PRINCIPALS:
+            logger.info(f"Client principal '{cpn}' is known")
+            up_key = self._create_principal_key(
+                enctype=enctype_to_use,
+                realm=realm,
+                principal_name=cname,
+                principal_passwd=KRB_KNOWN_PRINCIPALS[cpn],
             )
-            # TODO
+            logger.debug(
+                f"Created key {up_key.contents} for principal '{cpn}' with encryption type {enctype_to_use} "
+                f"(the first one offered by the client)"
+            )
         else:
-            logger.error(f"User '{upn}' is not known")
-            resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"User '{upn}' is not known")
+            logger.error(f"Client principal '{cpn}' is not known")
+            resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"User '{cpn}' is not known")
             self.transport.sendto(resp.to_asn1(), addr)
+        if spn in KRB_KNOWN_PRINCIPALS:
+            logger.info(f"Service principal '{spn}' is known")
+            sp_key = self._create_principal_key(
+                enctype=enctype_to_use,
+                realm=str(sname["name-string"][1]),
+                principal_name=sname,
+                principal_passwd=KRB_KNOWN_PRINCIPALS[spn],
+            )
+            logger.debug(
+                f"Created key {sp_key.contents} for principal '{spn}' with encryption type {enctype_to_use} "
+                f"(the first one offered by the client)"
+            )
+        else:
+            logger.error(f"Service principal '{spn}' is not known")
+            resp = KrbError(ErrorCodes.KDC_ERR_S_PRINCIPAL_UNKNOWN, f"User '{spn}' is not known")
+            self.transport.sendto(resp.to_asn1(), addr)
+        # TODO: Create TGT
+        # TODO: Create AS_REP message
+
+        session_key = self._create_session_key(enctype_to_use)
+        logger.debug(
+            f"Created session key {session_key.contents} for encryption type {enctype_to_use} "
+            f"(the first one offered by the client)"
+        )
 
 
     def _create_session_key(self, enctype: int) -> Key:
         """
-        Create a random session key for the specified encryption type.
+        Create a random session key for the specified encryption type
         """
-
         enctype_profile = _get_enctype_profile(enctype)
         seed = get_random_bytes(enctype_profile.seedsize)
         return enctype_profile.random_to_key(seed)
+
+
+    def _create_principal_key(self, enctype: int, realm: str, principal_name: PrincipalName, principal_passwd: str) -> Key:
+        """
+        Create the key derived from the principal's password for the specified encryption type
+        """
+        enctype_profile = _get_enctype_profile(enctype)
+        salt = realm + str(principal_name["name-string"][0])
+        return enctype_profile.string_to_key(principal_passwd, salt, params=None)
 
 
 async def main() -> int:
