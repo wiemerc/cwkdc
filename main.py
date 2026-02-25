@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from impacket.krb5.asn1 import AS_REQ, KRB_ERROR, seq_set
 from impacket.krb5.constants import ApplicationTagNumbers, ErrorCodes, PrincipalNameType
 from impacket.krb5.crypto import Key, _get_enctype_profile, get_random_bytes
+from impacket.krb5.types import Principal
 from loguru import logger
 from pyasn1.codec.der import decoder, encoder
 
@@ -29,7 +30,7 @@ class KrbError:
         self.code = code
         self.text = text
 
-    def to_bytes(self) -> bytes:
+    def to_asn1(self) -> bytes:
         msg = KRB_ERROR()
         msg["pvno"] = 5
         msg["msg-type"] = ApplicationTagNumbers.KRB_ERROR.value
@@ -39,18 +40,7 @@ class KrbError:
         msg["realm"] = KRB_REALM
         msg["error-code"] = self.code.value
         msg["e-text"] = self.text
-
-        # TODO: Why doesn't the code below work?
-        # sname = PrincipalName()
-        # sname["name-type"] = PrincipalNameType.NT_SRV_INST.value
-        # sname["name-string"][0] = KRB_SNAME
-        # sname["name-string"][1] = KRB_REALM
-        # resp["sname"] = sname
-        sname_component = seq_set(msg, "sname")
-        sname_component["name-type"] = PrincipalNameType.NT_SRV_INST.value
-        seq_set(sname_component, "name-string")
-        sname_component["name-string"][0] = KRB_SNAME
-        sname_component["name-string"][1] = KRB_REALM
+        seq_set(msg, "sname", Principal((KRB_SNAME, KRB_REALM), type=PrincipalNameType.NT_SRV_INST.value).components_to_asn1)
         return encoder.encode(msg)
 
 
@@ -91,7 +81,7 @@ class KerberosServer:
         else:
             logger.error(f"User '{upn}' is not known")
             resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"User '{upn}' is not known")
-            self.transport.sendto(resp.to_bytes(), addr)
+            self.transport.sendto(resp.to_asn1(), addr)
 
 
     def _create_session_key(self, enctype: int) -> Key:
