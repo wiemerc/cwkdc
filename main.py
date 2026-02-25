@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from impacket.krb5.asn1 import AS_REQ, KRB_ERROR, seq_set
 from impacket.krb5.constants import ApplicationTagNumbers, ErrorCodes, PrincipalNameType
+from impacket.krb5.crypto import Key, _get_enctype_profile, get_random_bytes
 from loguru import logger
 from pyasn1.codec.der import decoder, encoder
 
@@ -55,7 +56,7 @@ class KrbError:
 
 
 # Relevant links:
-# - https://www.youtube.com/watch?v=5N242XcKAsM
+# - https://www.youtube.com/watch?v=pzrtfRpPVM4
 # - https://academy.hackthebox.com/module/74/section/701
 # - https://datatracker.ietf.org/doc/html/rfc4120
 # - https://kerberos.org/software/tutorial.html
@@ -77,16 +78,30 @@ class KerberosServer:
         upn = str(cname["name-string"][0]) + "@" + realm
         sname = req_body["sname"]
         spn = str(sname["name-string"][0]) + "@" + str(sname["name-string"][1])
-        nonce = int(req_body["nonce"])
-        logger.debug(f"Message is AS-REQ: UPN={upn}, SPN={spn}, nonce={nonce}")
+        logger.debug(f"Message is AS-REQ: UPN={upn}, SPN={spn}")
 
         if upn in KRB_KNOWN_USER_PRINCIPAL_NAMES:
             logger.info(f"User '{upn}' is known")
+            enctype_to_use = req_body["etype"][0]
+            session_key = self._create_session_key(enctype_to_use)
+            logger.debug(
+                f"Created session key '{session_key}' for encryption type {enctype_to_use} (the first one offered by the client)"
+            )
             # TODO
         else:
             logger.error(f"User '{upn}' is not known")
             resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"User '{upn}' is not known")
             self.transport.sendto(resp.to_bytes(), addr)
+
+
+    def _create_session_key(self, enctype: int) -> Key:
+        """
+        Create a random session key for the specified encryption type.
+        """
+
+        enctype_profile = _get_enctype_profile(enctype)
+        seed = get_random_bytes(enctype_profile.seedsize)
+        return enctype_profile.random_to_key(seed)
 
 
 async def main() -> int:
