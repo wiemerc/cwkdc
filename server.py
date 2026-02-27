@@ -192,12 +192,11 @@ class KdcServer:
         enc_ticket_part["starttime"] = KerberosTime.to_asn1(now)
         enc_ticket_part["endtime"] = KerberosTime.to_asn1(now + duration)
 
-        encoded_enc_ticket_part = encoder.encode(enc_ticket_part)
-        # Key usage 2 = ticket to be used in AS-REP / TGS-REP messages (encrypted with the service key)
+        logger.debug(f"Encrypted part of the TGT (before encryption): {enc_ticket_part}")
         cipher_text = encrypt(
             key=service_key,
-            keyusage=2,
-            plaintext=encoded_enc_ticket_part,
+            keyusage=2,  # ticket to be used in AS-REP / TGS-REP messages (encrypted with the service key)
+            plaintext=encoder.encode(enc_ticket_part),
             confounder=b""
         )
 
@@ -210,8 +209,6 @@ class KdcServer:
         enc_part = seq_set(ticket, "enc-part")
         enc_part["etype"] = service_key.enctype
         enc_part["cipher"] = cipher_text
-
-        logger.debug(f"Created TGT {ticket}")
 
 
     def _create_as_rep(
@@ -255,10 +252,10 @@ class KdcServer:
         sname["name-string"][0] = KRB_SNAME
         sname["name-string"][1] = KRB_REALM
 
-        # Key usage 3 = AS-REP encrypted part (encrypted with client key)
+        logger.debug(f"Encrypted part of the AS_REP message (before encryption): {enc_as_rep_part}")
         cipher_text = encrypt(
             key=client_key,
-            keyusage=3,
+            keyusage=3,  # AS-REP encrypted part (encrypted with client key)
             plaintext=encoder.encode(enc_as_rep_part),
             confounder=b""
         )
