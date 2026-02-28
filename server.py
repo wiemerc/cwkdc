@@ -20,7 +20,7 @@ from impacket.krb5.asn1 import (
     seq_set_iter,
 )
 from impacket.krb5.constants import ApplicationTagNumbers, ErrorCodes, PrincipalNameType, TicketFlags
-from impacket.krb5.crypto import Key, _get_enctype_profile, encrypt, get_random_bytes
+from impacket.krb5.crypto import Cksumtype, Key, _get_enctype_profile, encrypt, get_random_bytes, make_checksum
 from impacket.krb5.types import KerberosTime, Principal
 from loguru import logger
 from pyasn1.codec.der import decoder, encoder
@@ -103,7 +103,7 @@ class KdcServer:
             )
         else:
             logger.error(f"Client principal '{cpn}' is not known")
-            resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"User '{cpn}' is not known")
+            resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"Client principal '{cpn}' is not known")
             self.transport.sendto(resp.to_asn1(), addr)
             return
 
@@ -121,7 +121,7 @@ class KdcServer:
             )
         else:
             logger.error(f"Service principal '{spn}' is not known")
-            resp = KrbError(ErrorCodes.KDC_ERR_S_PRINCIPAL_UNKNOWN, f"User '{spn}' is not known")
+            resp = KrbError(ErrorCodes.KDC_ERR_S_PRINCIPAL_UNKNOWN, f"Service principal '{spn}' is not known")
             self.transport.sendto(resp.to_asn1(), addr)
             return
         
@@ -132,7 +132,7 @@ class KdcServer:
         )
         as_rep = self._create_as_rep(cname, realm, session_key, service_key, client_key, nonce)
         logger.debug(f"Created message {as_rep}")
-        logger.debug("Sending AS_REP message to client")
+        logger.info("Sending AS_REP message to client")
         self.transport.sendto(encoder.encode(as_rep), addr)
 
 
@@ -253,12 +253,14 @@ class KdcServer:
         sname["name-string"][1] = KRB_REALM
 
         logger.debug(f"Encrypted part of the AS_REP message (before encryption): {enc_as_rep_part}")
-        cipher_text = encrypt(
+        encoded_enc_as_rep_part = encoder.encode(enc_as_rep_part)
+        encrypted_enc_as_rep_part = encrypt(
             key=client_key,
             keyusage=3,  # AS-REP encrypted part (encrypted with client key)
-            plaintext=encoder.encode(enc_as_rep_part),
+            plaintext=encoded_enc_as_rep_part,
             confounder=b""
         )
+        enc_as_rep_part_checksum = make_checksum(Cksumtype.SHA1_AES256, client_key, 3, encoded_enc_as_rep_part)
 
         as_rep = AS_REP()
         as_rep["pvno"] = KRB_VERSION
@@ -275,7 +277,7 @@ class KdcServer:
 
         enc_part = seq_set(as_rep, "enc-part")
         enc_part["etype"] = client_key.enctype
-        enc_part["cipher"] = cipher_text
+        enc_part["cipher"] = encrypted_enc_as_rep_part + enc_as_rep_part_checksum
 
         return as_rep
 
