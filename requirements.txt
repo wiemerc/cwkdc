@@ -1,2 +1,2 @@
-scapy
 loguru
+impacket
