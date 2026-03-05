@@ -1,0 +1,43 @@
+--- .venv/lib/python3.14/site-packages/impacket/krb5/crypto.py.orig	2026-03-05 11:01:37
++++ .venv/lib/python3.14/site-packages/impacket/krb5/crypto.py	2026-03-05 11:29:59
+@@ -217,6 +217,8 @@
+         ke = cls.derive(key, pack('>IB', keyusage, 0xAA))
+         if confounder is None:
+             confounder = get_random_bytes(cls.blocksize)
++        else:
++            confounder = bytes(confounder)
+         basic_plaintext = confounder + _zeropad(plaintext, cls.padsize)
+         hmac = HMAC.new(ki.contents, basic_plaintext, cls.hashmod).digest()
+         return cls.basic_encrypt(ke, basic_plaintext) + hmac[:cls.macsize]
+@@ -261,6 +263,8 @@
+     def encrypt(cls, key, keyusage, plaintext, confounder):
+         if confounder is None:
+             confounder = get_random_bytes(cls.blocksize)
++        else:
++            confounder = bytes(confounder)
+         basic_plaintext = confounder + b'\x00'*cls.macsize + _zeropad(plaintext, cls.padsize)
+         checksum = cls.hashmod.new(basic_plaintext).digest()
+         basic_plaintext = basic_plaintext[:len(confounder)] + checksum + basic_plaintext[len(confounder)+len(checksum):]
+@@ -531,10 +535,12 @@
+     def encrypt(cls, key, keyusage, plaintext, confounder):
+         if confounder is None:
+             confounder = get_random_bytes(8)
++        else:
++            confounder = bytes(confounder)
+         ki = HMAC.new(key.contents, cls.usage_str(keyusage), MD5).digest()
+         cksum = HMAC.new(ki, confounder + plaintext, MD5).digest()
+         ke = HMAC.new(ki, cksum, MD5).digest()
+-        return cksum + ARC4.new(ke).encrypt(bytes(confounder + plaintext))
++        return cksum + ARC4.new(ke).encrypt(confounder + plaintext)
+ 
+     @classmethod
+     def decrypt(cls, key, keyusage, ciphertext):
+@@ -675,7 +681,7 @@
+ 
+ def encrypt(key, keyusage, plaintext, confounder=None):
+     e = _get_enctype_profile(key.enctype)
+-    return e.encrypt(key, keyusage, bytes(plaintext), bytes(confounder))
++    return e.encrypt(key, keyusage, bytes(plaintext), confounder)
+ 
+ 
+ def decrypt(key, keyusage, ciphertext):
