@@ -36,7 +36,7 @@ KRB_KNOWN_PRINCIPALS = {
     "consti@CWTEST.LOCAL": "consti123",
     "krbtgt@CWTEST.LOCAL": "krbtgt123",
 }
-KRB_DEFAULT_TICKET_VALIDITY_TIME_HOURS = 10
+KRB_DEFAULT_TICKET_VALIDITY_TIME_HOURS = 8 
 
 
 class KrbError:
@@ -197,7 +197,6 @@ class KdcServer:
             key=service_key,
             keyusage=2,  # ticket to be used in AS-REP / TGS-REP messages (encrypted with the service key)
             plaintext=encoder.encode(enc_ticket_part),
-            confounder=b""
         )
 
         ticket["tkt-vno"] = KRB_VERSION
@@ -244,6 +243,7 @@ class KdcServer:
 
         enc_as_rep_part["authtime"] = KerberosTime.to_asn1(now)
         enc_as_rep_part["starttime"] = KerberosTime.to_asn1(now)
+        # TODO: Clamp end time to the value requested by the client
         enc_as_rep_part["endtime"] = KerberosTime.to_asn1(now + duration)
 
         enc_as_rep_part["srealm"] = KRB_REALM
@@ -253,14 +253,13 @@ class KdcServer:
         sname["name-string"][1] = KRB_REALM
 
         logger.debug(f"Encrypted part of the AS_REP message (before encryption): {enc_as_rep_part}")
-        encoded_enc_as_rep_part = encoder.encode(enc_as_rep_part)
+        # We provide no confounder to encrypt(), which means a random one will be created for us. Note that this only works
+        # with the patched version of Impacket (see file `impacket-krb5-crypto.py.diff`).
         encrypted_enc_as_rep_part = encrypt(
             key=client_key,
             keyusage=3,  # AS-REP encrypted part (encrypted with client key)
-            plaintext=encoded_enc_as_rep_part,
-            confounder=b""
+            plaintext=encoder.encode(enc_as_rep_part),
         )
-        enc_as_rep_part_checksum = make_checksum(Cksumtype.SHA1_AES256, client_key, 3, encoded_enc_as_rep_part)
 
         as_rep = AS_REP()
         as_rep["pvno"] = KRB_VERSION
@@ -273,11 +272,11 @@ class KdcServer:
         cname = seq_set(as_rep, "cname")
         cname["name-type"] = client_principal_name["name-type"]
         cname["name-string"][0] = str(client_principal_name["name-string"][0])
-        cname["name-string"][1] = client_realm
+#        cname["name-string"][1] = client_realm
 
         enc_part = seq_set(as_rep, "enc-part")
         enc_part["etype"] = client_key.enctype
-        enc_part["cipher"] = encrypted_enc_as_rep_part + enc_as_rep_part_checksum
+        enc_part["cipher"] = encrypted_enc_as_rep_part
 
         return as_rep
 
