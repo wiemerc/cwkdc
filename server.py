@@ -89,6 +89,7 @@ class KdcServer:
         nonce = int(as_req_body["nonce"])
         logger.info(f"Message is AS_REQ: UPN={cpn}, SPN={spn}, nonce={nonce}")
 
+        # TODO: Request pre-authentication using the current time stamp encrypted with the client's key (PA-ENC-TIMESTAMP)
         if cpn in KRB_KNOWN_PRINCIPALS:
             logger.info(f"Client principal '{cpn}' is known")
             client_key = self._create_principal_key(
@@ -272,7 +273,8 @@ class KdcServer:
         cname = seq_set(as_rep, "cname")
         cname["name-type"] = client_principal_name["name-type"]
         cname["name-string"][0] = str(client_principal_name["name-string"][0])
-#        cname["name-string"][1] = client_realm
+        # In contrast to the 'sname' attribute 'cname' only consists of of the principal's name without the realm. The realm is
+        # stored separately in 'crealm'.
 
         enc_part = seq_set(as_rep, "enc-part")
         enc_part["etype"] = client_key.enctype
