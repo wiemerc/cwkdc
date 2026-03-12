@@ -1,11 +1,10 @@
-import builtins
-
 from dataclasses import fields
 from typing import TypeVar, Generic, get_args, get_origin
 
-from impacket.krb5 import types
 from loguru import logger
-from pyasn1.type import tag, namedtype, univ, constraint, char, useful
+from pyasn1.type import tag
+from pyasn1.type.namedtype import NamedType, NamedTypes
+from pyasn1.type.univ import Sequence, SequenceOf
 
 
 # This class is just there so that we can annotate a field with `Asn1SequenceOf[...]`, which is not possible with the pyasn1
@@ -20,7 +19,7 @@ class Asn1Sequence:
     @classmethod
     def create_pyasn1_schema(cls):
         logger.debug(f"Creating pyasn1 schema for class '{cls.__name__}'")
-        components: list[namedtype.NamedType] = []
+        components: list[NamedType] = []
         for idx, field in enumerate(fields(cls)):
             if field.name == "appl_tag_num":
                 continue
@@ -28,9 +27,9 @@ class Asn1Sequence:
             component_tag = tag.Tag(tag.tagClassContext, tag.tagFormatSimple, idx)
             if get_origin(field.type) == Asn1SequenceOf:
                 logger.debug("Field is a SEQUENCE OF")
-                component = univ.SequenceOf(componentType=(get_args(field.type)[0])())
+                component = SequenceOf(componentType=(get_args(field.type)[0])())
                 components.append(
-                    namedtype.NamedType(
+                    NamedType(
                         name=field.name,
                         asn1Object=component.subtype(explicitTag=component_tag)
                     )
@@ -38,7 +37,7 @@ class Asn1Sequence:
             elif issubclass(field.type, Asn1Sequence):
                 logger.debug("Field is another SEQUENCE")
                 components.append(
-                    namedtype.NamedType(
+                    NamedType(
                         name=field.name,
                         asn1Object=(field.type.pyasn1_schema)().subtype(explicitTag=component_tag)
                     )
@@ -46,32 +45,32 @@ class Asn1Sequence:
             else:
                 # TODO: Check that type is actually a pyasn1 type
                 components.append(
-                    namedtype.NamedType(
+                    NamedType(
                         name=field.name,
                         asn1Object=(field.type)().subtype(explicitTag=component_tag)
-#                            asn1Object=univ.Integer().subtype(explicitTag=component_tag, subtypeSpec=constraint.ValueRangeConstraint(5, 5))
+#                            asn1Object=Integer().subtype(explicitTag=component_tag, subtypeSpec=constraint.ValueRangeConstraint(5, 5))
                     )
                 )
 
         if hasattr(cls, "appl_tag_num"):
             cls.pyasn1_schema = type(
                 "Asn1SequenceSchema",
-                (univ.Sequence,),
+                (Sequence,),
                 {
-                    "tagSet": univ.Sequence.tagSet.tagExplicitly(tag.Tag(
+                    "tagSet": Sequence.tagSet.tagExplicitly(tag.Tag(
                         tag.tagClassApplication,
                         tag.tagFormatConstructed,
                         cls.appl_tag_num,
                     )),
-                    "componentType": namedtype.NamedTypes(*components)
+                    "componentType": NamedTypes(*components)
                 }
             )
         else:
             cls.pyasn1_schema = type(
                 "Asn1SequenceSchema",
-                (univ.Sequence,),
+                (Sequence,),
                 {
-                    "componentType": namedtype.NamedTypes(*components)
+                    "componentType": NamedTypes(*components)
                 }
             )
 
