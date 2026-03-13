@@ -12,8 +12,6 @@ KRB_SNAME = "krbtgt"
 
 
 def main():
-    PrincipalName.create_pyasn1_schema()
-    KrbError.create_pyasn1_schema()
     err = KrbError(
         pvno=KRB_VERSION,
         sname=PrincipalName(name_type=PrincipalNameType.NT_SRV_INST.value, name_string=(KRB_SNAME, KRB_REALM)),

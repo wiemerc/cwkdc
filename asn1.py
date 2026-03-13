@@ -1,4 +1,4 @@
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from typing import TypeVar, Generic, get_args, get_origin
 
 from loguru import logger
@@ -15,10 +15,9 @@ class Asn1SequenceOf(Generic[T]):
 
 
 class Asn1Sequence:
-    # TODO: Use a metaclass to automatically call create_pyasn1_schema()
-    @classmethod
-    def create_pyasn1_schema(cls):
+    def __init_subclass__(cls, **kwargs): 
         logger.debug(f"Creating pyasn1 schema for class '{cls.__name__}'")
+        dataclass(cls)
         components: list[NamedType] = []
         for idx, field in enumerate(fields(cls)):
             if field.name == "appl_tag_num":
