@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from impacket.krb5.constants import ApplicationTagNumbers
 from pyasn1.type.char import GeneralString
+from pyasn1.type.constraint import ValueRangeConstraint
 from pyasn1.type.univ import Integer
 
 from asn1 import Asn1Sequence, Asn1SequenceOf
@@ -19,6 +20,7 @@ class PrincipalName(Asn1Sequence):
 class KrbError(Asn1Sequence):
     # TODO: How to declare constant fields like pvno? It has to come before the other fields because the order determines the
     # tag values.
-    pvno: Integer = field(metadata={"allowed_range": (5, 5)})
+    # TODO: Is there a better way to specify the application tag number?
+    pvno: Integer = field(metadata={"constraint": ValueRangeConstraint(5, 5)})
     sname: PrincipalName
     appl_tag_num: Integer = ApplicationTagNumbers.KRB_ERROR.value

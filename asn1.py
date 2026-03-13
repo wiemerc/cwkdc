@@ -44,11 +44,13 @@ class Asn1Sequence:
                 )
             else:
                 # TODO: Check that type is actually a pyasn1 type
+                kwargs = {"explicitTag": component_tag}
+                if "constraint" in field.metadata:
+                    kwargs["subtypeSpec"] = field.metadata["constraint"]
                 components.append(
                     NamedType(
                         name=field.name,
-                        asn1Object=(field.type)().subtype(explicitTag=component_tag)
-#                            asn1Object=Integer().subtype(explicitTag=component_tag, subtypeSpec=constraint.ValueRangeConstraint(5, 5))
+                        asn1Object=(field.type)().subtype(**kwargs)
                     )
                 )
 
