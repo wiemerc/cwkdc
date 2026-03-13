@@ -1,23 +1,24 @@
 import subprocess
 
-from impacket.krb5.constants import PrincipalNameType
-from pyasn1.codec.der import encoder
+from impacket.krb5.constants import ErrorCodes
 
-from krb5 import KrbError, PrincipalName
+from krb5 import KrbError
 
 
 KRB_VERSION = 5
 KRB_REALM = "CWTEST.LOCAL"
-KRB_SNAME = "krbtgt"
+KRB_SVC_PRINCIPAL = "krbtgt"
 
 
 def main():
-    err = KrbError(
-        pvno=KRB_VERSION,
-        sname=PrincipalName(name_type=PrincipalNameType.NT_SRV_INST.value, name_string=(KRB_SNAME, KRB_REALM)),
+    err = KrbError.from_params(
+        KRB_REALM,
+        KRB_SVC_PRINCIPAL,
+        ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN,
+        f"Client principal 'constix@CWTEST.LOCAL' is not known",
     )
     print(err.pyasn1_obj)
-    subprocess.run(["xxd"], input=encoder.encode(err.pyasn1_obj))
+    subprocess.run(["xxd"], input=err.to_bytes())
 
 
 main()
