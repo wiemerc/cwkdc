@@ -12,18 +12,19 @@ from impacket.krb5.asn1 import (
     AS_REQ,
     EncASRepPart,
     EncTicketPart,
-    KRB_ERROR,
     LastReq,
+    KerberosTime,
     PrincipalName,
     Ticket,
     seq_set,
     seq_set_iter,
 )
 from impacket.krb5.constants import ApplicationTagNumbers, ErrorCodes, PrincipalNameType, TicketFlags
-from impacket.krb5.crypto import Cksumtype, Key, _get_enctype_profile, encrypt, get_random_bytes, make_checksum
-from impacket.krb5.types import KerberosTime, Principal
+from impacket.krb5.crypto import Key, _get_enctype_profile, encrypt, get_random_bytes
 from loguru import logger
 from pyasn1.codec.der import decoder, encoder
+
+from krb5 import KrbError
 
 
 EXIT_OK = 0
@@ -31,35 +32,12 @@ EXIT_ERROR = 1
 
 KRB_VERSION = 5
 KRB_REALM = "CWTEST.LOCAL"
-KRB_SNAME = "krbtgt"
+KRB_SVC_PRINCIPAL = "krbtgt"
 KRB_KNOWN_PRINCIPALS = {
     "consti@CWTEST.LOCAL": "consti123",
     "krbtgt@CWTEST.LOCAL": "krbtgt123",
 }
 KRB_DEFAULT_TICKET_VALIDITY_TIME_HOURS = 8 
-
-
-class KrbError:
-    def __init__(self, code: ErrorCodes, text: str):
-        self.code = code
-        self.text = text
-
-    def to_asn1(self) -> bytes:
-        msg = KRB_ERROR()
-        msg["pvno"] = KRB_VERSION
-        msg["msg-type"] = ApplicationTagNumbers.KRB_ERROR.value
-        now = datetime.now(timezone.utc)
-        msg["stime"] = KerberosTime.to_asn1(now)
-        msg["susec"] = now.microsecond
-        msg["realm"] = KRB_REALM
-        msg["error-code"] = self.code.value
-        msg["e-text"] = self.text
-        sname = seq_set(msg, "sname")
-        sname["name-type"] = PrincipalNameType.NT_SRV_INST.value
-        sname["name-string"][0] = KRB_SNAME
-        sname["name-string"][1] = KRB_REALM
-        return encoder.encode(msg)
-
 
 
 # Relevant links:
@@ -104,8 +82,13 @@ class KdcServer:
             )
         else:
             logger.error(f"Client principal '{cpn}' is not known")
-            resp = KrbError(ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN, f"Client principal '{cpn}' is not known")
-            self.transport.sendto(resp.to_asn1(), addr)
+            error = KrbError.from_params(
+                KRB_REALM,
+                KRB_SVC_PRINCIPAL,
+                ErrorCodes.KDC_ERR_C_PRINCIPAL_UNKNOWN,
+                f"Client principal '{cpn}' is not known",
+            )
+            self.transport.sendto(error.to_bytes(), addr)
             return
 
         if spn in KRB_KNOWN_PRINCIPALS:
@@ -122,8 +105,13 @@ class KdcServer:
             )
         else:
             logger.error(f"Service principal '{spn}' is not known")
-            resp = KrbError(ErrorCodes.KDC_ERR_S_PRINCIPAL_UNKNOWN, f"Service principal '{spn}' is not known")
-            self.transport.sendto(resp.to_asn1(), addr)
+            error = KrbError.from_params(
+                KRB_REALM,
+                KRB_SVC_PRINCIPAL,
+                ErrorCodes.KDC_ERR_S_PRINCIPAL_UNKNOWN,
+                f"Service principal '{spn}' is not known",
+            )
+            self.transport.sendto(error.to_bytes(), addr)
             return
         
         session_key = self._create_session_key(enctype_to_use)
@@ -204,7 +192,7 @@ class KdcServer:
         ticket["realm"] = KRB_REALM
         sname = seq_set(ticket, "sname")
         sname["name-type"] = PrincipalNameType.NT_SRV_INST.value
-        sname["name-string"][0] = KRB_SNAME
+        sname["name-string"][0] = KRB_SVC_PRINCIPAL
         sname["name-string"][1] = KRB_REALM
         enc_part = seq_set(ticket, "enc-part")
         enc_part["etype"] = service_key.enctype
@@ -250,7 +238,7 @@ class KdcServer:
         enc_as_rep_part["srealm"] = KRB_REALM
         sname = seq_set(enc_as_rep_part, "sname")
         sname["name-type"] = PrincipalNameType.NT_SRV_INST.value
-        sname["name-string"][0] = KRB_SNAME
+        sname["name-string"][0] = KRB_SVC_PRINCIPAL
         sname["name-string"][1] = KRB_REALM
 
         logger.debug(f"Encrypted part of the AS_REP message (before encryption): {enc_as_rep_part}")
