@@ -18,7 +18,7 @@ class Asn1Sequence:
     def __init_subclass__(cls, **kwargs): 
         logger.debug(f"Creating pyasn1 schema for class '{cls.__name__}'")
         dataclass(cls)
-        components: list[NamedType | OptionalNamedType] = []
+        components_by_tag: dict[int, NamedType | OptionalNamedType] = {}
         for field in fields(cls):
             if field.name == "appl_tag_num":
                 continue
@@ -30,30 +30,24 @@ class Asn1Sequence:
             if get_origin(field_type) is Asn1SequenceOf:
                 logger.debug("Field is a SEQUENCE OF")
                 component = SequenceOf(componentType=(get_args(field_type)[0])())
-                components.append(
-                    component_type(
-                        name=field.name,
-                        asn1Object=component.subtype(explicitTag=component_tag)
-                    )
+                components_by_tag[field.metadata["tag"]] = component_type(
+                    name=field.name,
+                    asn1Object=component.subtype(explicitTag=component_tag)
                 )
             elif issubclass(field_type, Asn1Sequence):
                 logger.debug("Field is another SEQUENCE")
-                components.append(
-                    component_type(
-                        name=field.name,
-                        asn1Object=(field_type.pyasn1_schema)().subtype(explicitTag=component_tag)
-                    )
+                components_by_tag[field.metadata["tag"]] = component_type(
+                    name=field.name,
+                    asn1Object=(field_type.pyasn1_schema)().subtype(explicitTag=component_tag)
                 )
             else:
                 # TODO: Check that type is actually a pyasn1 type (or derived from one)
                 kwargs = {"explicitTag": component_tag}
                 if "constraint" in field.metadata:
                     kwargs["subtypeSpec"] = field.metadata["constraint"]
-                components.append(
-                    component_type(
-                        name=field.name,
-                        asn1Object=(field_type)().subtype(**kwargs)
-                    )
+                components_by_tag[field.metadata["tag"]] = component_type(
+                    name=field.name,
+                    asn1Object=(field_type)().subtype(**kwargs)
                 )
 
         if hasattr(cls, "appl_tag_num"):
@@ -66,7 +60,7 @@ class Asn1Sequence:
                         tag.tagFormatConstructed,
                         cls.appl_tag_num,
                     )),
-                    "componentType": NamedTypes(*components)
+                    "componentType": NamedTypes(*Asn1Sequence._get_components_sorted_by_tag(components_by_tag))
                 }
             )
         else:
@@ -74,7 +68,7 @@ class Asn1Sequence:
                 f"{cls.__name__}Schema",
                 (Sequence,),
                 {
-                    "componentType": NamedTypes(*components)
+                    "componentType": NamedTypes(*Asn1Sequence._get_components_sorted_by_tag(components_by_tag))
                 }
             )
 
@@ -107,3 +101,10 @@ class Asn1Sequence:
                     slot[child_field.name] = child_pyasn1_obj[child_field.name]
             else:
                 self.pyasn1_obj[field.name] = getattr(self, field.name)
+
+
+    @staticmethod
+    def _get_components_sorted_by_tag(
+        components_by_tag: dict[int, NamedType | OptionalNamedType]
+    ) -> list[NamedType | OptionalNamedType]:
+        return [item[1] for item in sorted(components_by_tag.items(), key=lambda item: item[0])]

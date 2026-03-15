@@ -17,7 +17,9 @@ KRB_VERSION = 5
 # We don't need the @dataclass decorator because the __init_subclass__() method of Asn1Sequence turns all subclasses into
 # dataclasses. See https://stackoverflow.com/a/73347629 for an explanation why we do this.
 # As always with dataclasses, fields with default values have to come after fields without. As non-optional components are
-# interleaved with  optional ones in the Kerberos types, we have to explicitly specify the tag numbers and can't rely on the field order.
+# interleaved with optional ones in the Kerberos types, we have to explicitly specify the tag numbers and can't rely on the field order.
+# In addition, in the pyasn1 schema the components have to be defined in the order defined by their tag numbers, so Asn1Sequence takes
+# care of that as well.
 
 # see https://datatracker.ietf.org/doc/html/rfc4120#appendix-A
 class PrincipalName(Asn1Sequence):
