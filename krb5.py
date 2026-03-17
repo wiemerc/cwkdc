@@ -1,7 +1,18 @@
 from dataclasses import field
 from datetime import UTC, datetime
 
-from impacket.krb5.asn1 import Int32, KerberosString, KerberosTime, Microseconds, Realm
+from impacket.krb5.asn1 import (
+    EncryptedData,
+    Int32,
+    HostAddresses,
+    KDCOptions,
+    KerberosString,
+    KerberosTime,
+    Microseconds,
+    Realm,
+    Ticket,
+    UInt32,
+)
 from impacket.krb5.constants import ApplicationTagNumbers, ErrorCodes, KerberosMessageTypes, PrincipalNameType
 from pyasn1.codec.der import encoder
 from pyasn1.type.char import GeneralString
@@ -57,5 +68,29 @@ class KrbError(Asn1Sequence):
             e_text=text,
         )
     
+    def to_bytes(self) -> bytes:
+        return encoder.encode(self.pyasn1_obj)
+
+
+# see https://datatracker.ietf.org/doc/html/rfc4120#section-5.4.1
+# TODO: Replace all sequences from Impacket (e. g. HostAddresses) with our classes
+class KrbKDCRequestBody(Asn1Sequence):
+    kdc_options: KDCOptions = field(metadata={"tag": 0})
+    realm: Realm = field(metadata={"tag": 2})
+    till_tstamp: KerberosTime = field(metadata={"tag": 5})
+    nonce: UInt32 = field(metadata={"tag": 7})
+    etype: Asn1SequenceOf[Int32] = field(metadata={"tag": 8})
+    cname: PrincipalName | None = field(default=None, metadata={"tag": 1})
+    sname: PrincipalName | None = field(default=None, metadata={"tag": 3})
+    from_tstamp: KerberosTime | None = field(default=None, metadata={"tag": 4})
+    rtime: KerberosTime | None = field(default=None, metadata={"tag": 6})
+    addresses: HostAddresses | None = field(default=None, metadata={"tag": 9})
+    enc_authorization_data: EncryptedData | None = field(default=None, metadata={"tag": 10})
+    additional_tickets: Asn1SequenceOf[Ticket] | None = field(default=None, metadata={"tag": 11})
+    
+    @staticmethod
+    def from_params() -> "KrbKDCRequestBody":
+        pass
+
     def to_bytes(self) -> bytes:
         return encoder.encode(self.pyasn1_obj)
