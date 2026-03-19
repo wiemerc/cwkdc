@@ -74,7 +74,7 @@ class KrbError(Asn1Sequence):
 
 # see https://datatracker.ietf.org/doc/html/rfc4120#section-5.4.1
 # TODO: Replace all sequences from Impacket (e. g. HostAddresses) with our classes
-class KrbKDCRequestBody(Asn1Sequence):
+class KrbKdcRequestBody(Asn1Sequence):
     kdc_options: KDCOptions = field(metadata={"tag": 0})
     realm: Realm = field(metadata={"tag": 2})
     till_tstamp: KerberosTime = field(metadata={"tag": 5})
@@ -94,3 +94,7 @@ class KrbKDCRequestBody(Asn1Sequence):
 
     def to_bytes(self) -> bytes:
         return encoder.encode(self.pyasn1_obj)
+
+
+# TODO: Define classes for AS_REQ, AS_REP, Ticket and so on and add methods to replace the methods of KdcServer, e. g.
+# _create_tgt() and _create_as_rep()

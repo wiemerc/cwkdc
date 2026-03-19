@@ -58,6 +58,8 @@ class KdcServer:
         logger.debug(f"Message received from {addr}, {len(data)} bytes long")
         as_req, _ = decoder.decode(data, asn1Spec=AS_REQ())
         as_req_body = as_req["req-body"]
+        # TODO: Store all information that's needed later in a context or session object
+        # TODO: Move method _create_session_key() to that object
         cname = as_req_body["cname"]
         realm = str(as_req_body["realm"])
         cpn = str(cname["name-string"][0]) + "@" + realm
@@ -68,6 +70,7 @@ class KdcServer:
         logger.info(f"Message is AS_REQ: UPN={cpn}, SPN={spn}, nonce={nonce}")
 
         # TODO: Request pre-authentication using the current time stamp encrypted with the client's key (PA-ENC-TIMESTAMP)
+        # TODO: Also implement service tickets (TGS_REQ / TGS_REP)
         if cpn in KRB_KNOWN_PRINCIPALS:
             logger.info(f"Client principal '{cpn}' is known")
             client_key = self._create_principal_key(
@@ -182,7 +185,7 @@ class KdcServer:
         enc_ticket_part["endtime"] = KerberosTime.to_asn1(now + duration)
 
         logger.debug(f"Encrypted part of the TGT (before encryption): {enc_ticket_part}")
-        cipher_text = encrypt(
+        encrypted_enc_ticket_part = encrypt(
             key=service_key,
             keyusage=2,  # ticket to be used in AS-REP / TGS-REP messages (encrypted with the service key)
             plaintext=encoder.encode(enc_ticket_part),
@@ -196,7 +199,7 @@ class KdcServer:
         sname["name-string"][1] = KRB_REALM
         enc_part = seq_set(ticket, "enc-part")
         enc_part["etype"] = service_key.enctype
-        enc_part["cipher"] = cipher_text
+        enc_part["cipher"] = encrypted_enc_ticket_part
 
 
     def _create_as_rep(
